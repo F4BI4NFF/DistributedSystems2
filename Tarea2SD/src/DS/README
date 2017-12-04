@@ -1,0 +1,38 @@
+Integrantes:
+	-Fabián Fernández	201373539-8
+	-José Eduardo Caimapo 201373573-8
+
+Supuestos:
+// Modificar
+	-
+	-
+
+Estrategia de implementación:
+	-
+	-
+	-
+	-
+	-
+
+Instrucciones de ejecución:
+	- Se debe iniciar el servicio rmi en el equipo con:
+
+			rmiregistry puerto_rmi &
+
+	-Compilar las clases con:
+
+			make
+
+	-Se debe iniciar el servidor con:
+
+		make process MAIN=Servidor
+
+	-Luego de que el servidor esté listo, se inician los procesos con el comando:
+
+		make process ID=id N=n DELAY=initialdelay BEARER=bearer
+
+	Se ejecuta cada proceso en distintas consolas, se espera a que todos sean ejecutados para comenzar el algoritmo.
+	ID : Cada proceso debe tener una diferente incremental.
+	Delay : Tiempo de demora antes de intentar entrar a la SC.
+	Bearer : Si el proceso posee el token es 1 , etoc 0.
+

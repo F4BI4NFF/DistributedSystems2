@@ -34,7 +34,8 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
      * Number of processes participating in message exchange
      */
     private int numProcesses;
-
+    private String color = null;
+    private int cantidad_de_token = 0;
     private Token token = null;
     private boolean inCriticalSection = false;
 
@@ -67,44 +68,51 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
         }
 
         token = null;
+        color = "Amarillo";
         inCriticalSection = false;
         computationFinished = false;
 
     }
 
-    public void compute() throws RemoteException {
+    public void compute(int delay) throws RemoteException {
         long t1 = System.currentTimeMillis();
-        System.out.println("Process " + index + " starts computations.");
+        System.out.println("El proceso " + index + " ha entrado a al conjunto de procesos.");
         try {
             Thread.sleep(random.nextInt(MAX_COMPUTATION_DELAY));
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
-        criticalSectionWrapper();
+        criticalSectionWrapper(delay);
 
         try {
             Thread.sleep(random.nextInt(MAX_COMPUTATION_DELAY));
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-
+            
         long t2 = System.currentTimeMillis();
         computationFinished = true;
-        System.out.println("Process " + index + " ends computations which lasted for " + (t2 - t1) + " ms.");
+        System.out.println("El proceso " + index + " ha demorado " + (t2 - t1) + " ms. en ejecutar su SC.");
     }
 
-    private void criticalSectionWrapper() {
+    private void criticalSectionWrapper(int delay) {
         Request();
         waitToken();
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         criticalSection();
         dispatchToken();
     }
 
     private void Request() {
         N.set(index, N.get(index) + 1);
-        System.out.println("(" + index + ") broadcasting request");
-        System.out.println("(" + index + ") N: " + N);
+        System.out.println("[Proceso '" + index +"'," +color+ "] Realiza Request a otros procesos.");
+        System.out.println("[Proceso '" + index +"'," +color+ "] RN"+index+": " + N);
+        
         for (String url : urls) {
             Inter dest = getProcess(url);
             try {
@@ -134,9 +142,9 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
     }
 
     public synchronized void receiveRequest(RequestMessage rm) {
-        System.out.println("(" + index + ") received request from " + rm.getSrcId() + " with seq. " + rm.getSequence());
+        System.out.println("[Proceso '" + index +"'," +color+ "] Recibe Request de proceso " + rm.getSrcId() + " con numero de secuencia " + rm.getSequence());
         N.set(rm.getSrcId(), rm.getSequence());
-        System.out.println("(" + index + ") N: " + N);
+        System.out.println("[Proceso '" + index +"'," +color+ "] RN"+index+": " + N);
 
         if (!inCriticalSection && token != null && index != rm.getSrcId() &&
                 (N.get(rm.getSrcId()) > token.getTN().get(rm.getSrcId()))) {
@@ -149,10 +157,12 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
         Inter dest = getProcess(url);
 
         try {
-            System.out.println("(" + index + ") sends token to " + dest.getIndex());
+            System.out.println("[Proceso '" + index +"'," +color+ "] Envia token a Proceso " + dest.getIndex());
             TokenMessage tm = new TokenMessage(urls[index], index, token);
-            dest.receiveToken(tm);
+            dest.takeToken(tm);
             token = null;
+            color = "Verde";
+            if(cantidad_de_token == 1){color = "Amarillo";}
         } catch (RemoteException e) {
             throw new RuntimeException(e);
         }
@@ -165,9 +175,12 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
     }
 
     @Override
-    public void receiveToken(TokenMessage tm) {
-       System.out.println("(" + index + ") received token");
-        token = tm.getToken();
+    public void takeToken(TokenMessage tm) {
+       token = tm.getToken();
+       cantidad_de_token = cantidad_de_token+1;
+       if (token != null && color == "Amarillo"){
+           color="Verde";}
+       System.out.println("[Proceso '" + index +"'," +color+ "] Recibe exitosamente el token");
     }
 
     public void waitToken() {
@@ -180,30 +193,30 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
                 throw new RuntimeException(e);
             }
             if (waitForToken % 100 == 0) {
-                System.out.println("(" + index + ") keeps waiting for token");
+                System.out.println("[Proceso '" + index +"'," +color+ "] Sigue en espera del token...");
             }
         }
     }
 
     private void criticalSection() {
         inCriticalSection = true;
-        int delay = random.nextInt(MAX_COMPUTATION_DELAY);
-        // CAMBIAR CON EL DELAY QUE ES PASADO!
-        System.out.println("Process " + index + " enters critical section and will compute for " + delay + " ms.");
-
+        color="Rojo";
+        int tiempo_SC = random.nextInt(MAX_COMPUTATION_DELAY);
+        System.out.println("[Proceso '" + index +"'," +color+ "] Entra a su SC y la ejecutara en " + tiempo_SC + " ms.");
+        cantidad_de_token = cantidad_de_token+1;
         try {
-            Thread.sleep(delay);
+            Thread.sleep(tiempo_SC);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-
-        System.out.println("Process " + index + " leaves critical section.");
+        color="Verde";
+        System.out.println("[Proceso '" + index +"'," +color+ "] Ejecuto su SC de manera exitosa.");
         inCriticalSection = false;
     }
 
     private void dispatchToken() {
         token.getTN().set(index, N.get(index));
-        System.out.println("(" + index + ") tries to dispatch token");
+        System.out.println("[Proceso '" + index +"'," +color+ "] Intenta enviar token, va a verificar condiciones...");
         System.out.println("TN: " + token.getTN());
         System.out.println("N: " + N);
 
@@ -213,7 +226,7 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
             }
             if (N.get(j) > token.getTN().get(j)) {
                 sendToken(urls[j]);
-                System.out.println("(" + index + ") dispatched token to " + j);
+                System.out.println("[Proceso '" + index +"'," +color+ "] Ha enviado el token al Proceso " + j);
                 break;
             }
         }
@@ -223,15 +236,8 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
     public boolean isComputationFinished() {
         return computationFinished;
     }
-
-
-
-    public void takeToken(String token) throws RemoteException{
-        System.out.println("Ahora posees el token, puedes ejecutar tu SC");
-
-    }
     public void kill() throws RemoteException{
-        System.out.println("Este método detiene el algoritmo y mata un proceso!");
+        System.out.println("Este metodo detiene el algoritmo y mata un proceso!");
     }
 
 
@@ -245,7 +251,6 @@ public class Server extends UnicastRemoteObject implements Inter , Runnable {
         if (System.getSecurityManager() == null) {
             System.setSecurityManager(new RMISecurityManager());
         }
-
         System.out.println("[Servidor] Iniciando...");
         try {
             new Main_Process().startServer();
